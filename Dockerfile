@@ -31,6 +31,8 @@ RUN \
 	tar \
 	unrar \
 	unzip && \
+	gcc \
+	make \
 	build-essential \
 	automake \
 	autoconf \
