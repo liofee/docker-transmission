@@ -6,6 +6,8 @@ ARG TRANSMISSION_VERSION
 LABEL build_version="Linuxserver.io version:- ${VERSION} Build-date:- ${BUILD_DATE}"
 LABEL maintainer="aptalca"
 
+ARG DEBIAN_FRONTEND="noninteractive"
+
 RUN \
  echo "**** install packages ****" && \
  apt-get update && \
