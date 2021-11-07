@@ -10,8 +10,7 @@ ARG DEBIAN_FRONTEND="noninteractive"
 
 RUN \
  echo "**** install packages ****" && \
- bash -c "cat > /etc/apt/sources.list" << EOF
- # 默认注释了源码镜像以提高 apt update 速度，如有需要可自行取消注释
+ echo "\
  deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal main restricted universe multiverse
  # deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal main restricted universe multiverse
  deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-updates main restricted universe multiverse
@@ -19,8 +18,7 @@ RUN \
  deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-backports main restricted universe multiverse
  # deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-backports main restricted universe multiverse
  deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-security main restricted universe multiverse
- # deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-security main restricted universe multiverse
- EOF
+ # deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-security main restricted universe multiverse">/etc/apt/sources.list && \
  apt-get update && \
  apt-get install -y \
 	ca-certificates \
