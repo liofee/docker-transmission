@@ -1,4 +1,4 @@
-FROM ghcr.io/linuxserver/baseimage-alpine:3.13
+FROM ghcr.io/linuxserver/baseimage-ubuntu:focal
 
 ARG BUILD_DATE
 ARG VERSION
@@ -8,7 +8,8 @@ LABEL maintainer="aptalca"
 
 RUN \
  echo "**** install packages ****" && \
- apk add --no-cache \
+ apt-get update && \
+ apt-get install -y \
 	ca-certificates \
 	curl \
 	findutils \
@@ -20,8 +21,6 @@ RUN \
 	tar \
 	unrar \
 	unzip && \
- echo "**** install transmission ****" && \
- apk add --no-cache \
 	build-essential \
 	automake \
 	autoconf \
