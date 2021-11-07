@@ -18,18 +18,34 @@ RUN \
 	python3 \
 	rsync \
 	tar \
-	transmission-cli \
-	transmission-daemon \
 	unrar \
 	unzip && \
  echo "**** install transmission ****" && \
- if [ -z ${TRANSMISSION_VERSION+x} ]; then \
-	TRANSMISSION_VERSION=$(curl -sL "http://dl-cdn.alpinelinux.org/alpine/v3.13/community/x86_64/APKINDEX.tar.gz" | tar -xz -C /tmp \
-	&& awk '/^P:transmission-daemon$/,/V:/' /tmp/APKINDEX | sed -n 2p | sed 's/^V://'); \
- fi && \
  apk add --no-cache \
-	transmission-cli==${TRANSMISSION_VERSION} \
-	transmission-daemon==${TRANSMISSION_VERSION} && \
+	build-essential \
+	automake \
+	autoconf \
+	libtool \
+	pkg-config \
+	intltool \
+	libcurl4-openssl-dev \
+	libglib2.0-dev \
+	libevent-dev \
+	libminiupnpc-dev \
+	libgtk-3-dev \
+	libappindicator3-dev && \
+ curl -o \
+ 	/tmp/transmission.zip -L \
+	"https://github.com/liofee/transmission/archive/refs/tags/2.9.4-rc1.zip" && \
+ unzip \
+	/tmp/transmission.zip -d \
+	/tmp/transmission && \
+ cd tmp/Transmission && \
+ mkdir build && \
+ cd build && \
+ cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo .. && \
+ make && \
+ make install && \
  echo "**** install third party themes ****" && \
  curl -o \
 	/tmp/combustion.zip -L \
