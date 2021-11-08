@@ -29,23 +29,9 @@ RUN \
  cd /transmission-build && \
  
  echo "**** download transmission ****" && \
- curl -O https://codeload.github.com/transmission/transmission/tar.gz/refs/tags/2.94 && \
- tar -zxf 2.94 && \
- cd transmission-2.94 && \
- 
- echo "**** download patch ****" && \
- mkdir patches && \
- curl https://github.com/liofee/docker-transmission/raw/master/patches/0001-path-random_announce.patch \
-	-o patches/0001-path-random_announce.patch && \
- curl https://github.com/liofee/docker-transmission/raw/master/patches/0002-path-fdlimit.patch \
-	-o patches/0002-path-fdlimit.patch && \
- curl https://github.com/liofee/docker-transmission/raw/master/patches/0003-path-fast_hash_check.patch \
-	-o patches/0003-path-fast_hash_check.patch && \
- 
- echo "**** apply patch ****" && \
- patch -N -p0 < patches/0001-path-random_announce.patch && \
- patch -N -p0 < patches/0002-path-fdlimit.patch && \
- patch -N -p0 < patches/0003-path-fast_hash_check.patch && \
+ curl -O https://codeload.github.com/liofee/transmission/tar.gz/refs/tags/2.94-fc && \
+ tar -zxf 2.94-fc && \
+ cd transmission-2.94-fc && \
  
  echo "**** setup artifact folder ****" && \
  mkdir build && \
