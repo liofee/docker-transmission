@@ -35,17 +35,17 @@ RUN \
  
  echo "**** download patch ****" && \
  mkdir patches && \
- curl https://raw.githubusercontent.com/TonyRL/docker-transmission-skip-hash-check/focal/patches/001-skip-hash-checking.patch \
-	-o patches/001-skip-hash-checking.patch && \
- curl https://raw.githubusercontent.com/TonyRL/docker-transmission-skip-hash-check/focal/patches/002-fdlimit.patch \
-	-o patches/002-fdlimit.patch && \
- curl https://raw.githubusercontent.com/TonyRL/docker-transmission-skip-hash-check/focal/patches/003-random-announce.patch \
-	-o patches/003-random-announce.patch && \
+ curl https://github.com/liofee/docker-transmission/raw/master/patches/0001-path-random_announce.patch \
+	-o patches/0001-path-random_announce.patch && \
+ curl https://github.com/liofee/docker-transmission/raw/master/patches/0002-path-fdlimit.patch \
+	-o patches/0002-path-fdlimit.patch && \
+ curl https://github.com/liofee/docker-transmission/raw/master/patches/0003-path-fast_hash_check.patch \
+	-o patches/0003-path-fast_hash_check.patch && \
  
  echo "**** apply patch ****" && \
- patch -N -p0 < patches/001-skip-hash-checking.patch && \
- patch -N -p0 < patches/002-fdlimit.patch && \
- patch -N -p0 < patches/003-random-announce.patch && \
+ patch -N -p0 < patches/0001-path-random_announce.patch && \
+ patch -N -p0 < patches/0002-path-fdlimit.patch && \
+ patch -N -p0 < patches/0003-path-fast_hash_check.patch && \
  
  echo "**** setup artifact folder ****" && \
  mkdir build && \
