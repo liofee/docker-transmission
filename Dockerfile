@@ -1,100 +1,106 @@
-FROM ghcr.io/linuxserver/baseimage-ubuntu:focal
+FROM ubuntu:focal as builder
 
+# set version label
 ARG BUILD_DATE
 ARG VERSION
-ARG TRANSMISSION_VERSION
-LABEL build_version="Linuxserver.io version:- ${VERSION} Build-date:- ${BUILD_DATE}"
-LABEL maintainer="aptalca"
+ARG DEBIAN_FRONTEND=noninteractive
+LABEL build_version="transmission version:- ${VERSION} Build-date:- ${BUILD_DATE}"
+LABEL maintainer="liofee"
 
-ARG DEBIAN_FRONTEND="noninteractive"
+COPY root/ /s6-config
+# install packages
+RUN \
+ echo "**** install packages ****" && \
+ apt update && \
+ apt install -qqy \
+	apt-utils \
+	build-essential \
+	curl \
+	intltool  \
+	libcurl4-openssl-dev \
+	libevent-dev \
+	libminiupnpc-dev \
+	libssl-dev \
+	libtool \
+	pkg-config \
+	unzip \
+	zlib1g-dev && \
+ mkdir /transmission-build && \
+ cd /transmission-build && \
+ 
+ echo "**** download transmission ****" && \
+ curl -O https://github.com/transmission/transmission/archive/refs/tags/2.94.tar.gz && \
+ tar Jxf 2.94.tar.gz && \
+ cd 2.94 && \
+ 
+ echo "**** download patch ****" && \
+ mkdir patches && \
+ curl https://raw.githubusercontent.com/TonyRL/docker-transmission-skip-hash-check/focal/patches/001-skip-hash-checking.patch \
+	-o patches/001-skip-hash-checking.patch && \
+ curl https://raw.githubusercontent.com/TonyRL/docker-transmission-skip-hash-check/focal/patches/002-fdlimit.patch \
+	-o patches/002-fdlimit.patch && \
+ curl https://raw.githubusercontent.com/TonyRL/docker-transmission-skip-hash-check/focal/patches/003-random-announce.patch \
+	-o patches/003-random-announce.patch && \
+ 
+ echo "**** apply patch ****" && \
+ patch -N -p0 < patches/001-skip-hash-checking.patch && \
+ patch -N -p0 < patches/002-fdlimit.patch && \
+ patch -N -p0 < patches/003-random-announce.patch && \
+ 
+ echo "**** setup artifact folder ****" && \
+ mkdir build && \
+ cd build && \
+ 
+ echo "**** compile checks ****" && \
+ ../autogen.sh --enable-daemon --disable-nls && \
+ echo "**** compile start ****" && \
+ make -j$(nproc) && \
+ echo "**** compile finish ****" && \
+ make install && \
+   
+ echo "**** setup default web interface  + transmission-web-control ****" && \
+ cp -rp /usr/local/share/transmission/web /web && \
+ cd / && \
+ curl -O https://codeload.github.com/ronggang/transmission-web-control/zip/master && \
+ unzip -q master && \
+ rm master && \
+ mv /transmission-web-control-master/src/ /transmission-web-control/ && \
+ rm -rf /transmission-web-control-master/ && \
+ cd / && \
+
+ echo "**** cleanup ****" && \
+ apt clean && \
+ rm -rf /transmission-build && \
+ echo "**** finish ****"
+
+FROM lsiobase/ubuntu:focal
 
 RUN \
  echo "**** install packages ****" && \
- echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal main restricted universe multiverse" >> /etc/apt/sources.list && \
- echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal main restricted universe multiverse" >> /etc/apt/sources.list && \
- echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
- echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
- echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
- echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
- echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list && \
- echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list && \
- apt-get update && \
- apt-get install -y \
-	ca-certificates \
-	curl \
-	findutils \
-	jq \
-	openssl \
-	p7zip \
-	python3 \
-	rsync \
-	tar \
-	unrar \
-	unzip && \
-	gcc \
-	make \
-	build-essential \
-	automake \
-	autoconf \
-	libtool \
-	pkg-config \
-	intltool \
-	libcurl4-openssl-dev \
-	libglib2.0-dev \
-	libevent-dev \
-	libminiupnpc-dev \
-	libgtk-3-dev \
-	libappindicator3-dev && \
- curl -o \
- 	/tmp/transmission.zip -L \
-	"https://github.com/liofee/transmission/archive/refs/tags/2.9.4-rc1.zip" && \
- unzip \
-	/tmp/transmission.zip -d \
-	/tmp/transmission && \
- cd tmp/Transmission && \
- mkdir build && \
- cd build && \
- cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo .. && \
- make && \
- make install && \
- echo "**** install third party themes ****" && \
- curl -o \
-	/tmp/combustion.zip -L \
-	"https://github.com/Secretmapper/combustion/archive/release.zip" && \
- unzip \
-	/tmp/combustion.zip -d \
-	/ && \
- mkdir -p /tmp/twctemp && \
- TWCVERSION=$(curl -sX GET "https://api.github.com/repos/ronggang/transmission-web-control/releases/latest" \
-	| awk '/tag_name/{print $4;exit}' FS='[""]') && \
- curl -o \
-	/tmp/twc.tar.gz -L \
-	"https://github.com/ronggang/transmission-web-control/archive/${TWCVERSION}.tar.gz" && \
- tar xf \
-	/tmp/twc.tar.gz -C \
-	/tmp/twctemp --strip-components=1 && \
- mv /tmp/twctemp/src /transmission-web-control && \
- mkdir -p /kettu && \
- curl -o \
-	/tmp/kettu.tar.gz -L \
-	"https://github.com/endor/kettu/archive/master.tar.gz" && \
- tar xf \
-	/tmp/kettu.tar.gz -C \
-	/kettu --strip-components=1 && \
- curl -o \
-	/tmp/flood-for-transmission.tar.gz -L \
-	"https://github.com/johman10/flood-for-transmission/releases/download/latest/flood-for-transmission.tar.gz" && \
- tar xf \
-	/tmp/flood-for-transmission.tar.gz -C \
-	/ && \
+ apt update && \
+ apt install -qqy \
+	libcurl4 \
+	libevent-2.1-7 \
+	libminiupnpc17 \
+	libnatpmp1 && \
  echo "**** cleanup ****" && \
- rm -rf \
-	/tmp/*
-
+ apt clean
 
 # copy local files
-COPY root/ /
+COPY --from=builder /usr/local/bin/ /usr/bin/
+COPY --from=builder /web  /web
+COPY --from=builder /transmission-web-control  /transmission-web-control
+COPY --from=builder /s6-config /
+
+RUN \
+ echo "**** setup web interface ****" && \
+ mkdir /usr/local/share/transmission && \
+ ln -s /web/ /usr/local/share/transmission/web && \
+ ln -s /web/index.html /transmission-web-control/index.original.html && \
+ ln -s /web/images/ /transmission-web-control/images && \
+ ln -s /web/javascript/ /transmission-web-control/javascript && \
+ ln -s /web/style/ /transmission-web-control/style
 
 # ports and volumes
-EXPOSE 9091 51413/tcp 51413/udp
+EXPOSE 9091 51413 51413/udp
 VOLUME /config /downloads /watch
