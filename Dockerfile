@@ -30,8 +30,8 @@ RUN \
  
  echo "**** download transmission ****" && \
  curl -O https://github.com/transmission/transmission/archive/refs/tags/2.94.tar.gz && \
- tar zxf 2.94.tar.gz && \
- cd 2.94 && \
+ tar -xzf 2.94.tar.gz && \
+ cd transmission-2.94 && \
  
  echo "**** download patch ****" && \
  mkdir patches && \
