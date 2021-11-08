@@ -1,4 +1,4 @@
-FROM ubuntu:focal as builder
+FROM ubuntu:bionic as builder
 
 # set version label
 ARG BUILD_DATE
