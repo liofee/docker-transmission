@@ -11,8 +11,8 @@ COPY root/ /s6-config
 # install packages
 RUN \
  echo "**** install packages ****" && \
- apt update && \
- apt install -qqy \
+ apt-get update && \
+ apt-get install -qqy \
 	apt-utils \
 	build-essential \
 	curl \
