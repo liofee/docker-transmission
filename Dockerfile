@@ -30,7 +30,7 @@ RUN \
  
  echo "**** download transmission ****" && \
  curl -O https://github.com/transmission/transmission/archive/refs/tags/2.94.tar.gz && \
- tar Jxf 2.94.tar.gz && \
+ tar zxf 2.94.tar.gz && \
  cd 2.94 && \
  
  echo "**** download patch ****" && \
@@ -73,7 +73,7 @@ RUN \
  rm -rf /transmission-build && \
  echo "**** finish ****"
 
-FROM lsiobase/ubuntu:focal
+FROM lsiobase/ubuntu:bionic
 
 RUN \
  echo "**** install packages ****" && \
