@@ -1,0 +1,351 @@
+From 85db4cdded4b1a31d3370859a73dcc30af8cbc9b Mon Sep 17 00:00:00 2001
+From: liofee <liofee@hotmail.com>
+Date: Tue, 9 Nov 2021 02:30:58 +0800
+Subject: [PATCH 3/3] path fast_hash_check
+
+---
+ libtransmission/rpc-server.c   |  2 +
+ libtransmission/rpcimpl.c      |  5 ++
+ libtransmission/torrent-ctor.c | 16 ++++++
+ libtransmission/torrent.c      |  2 +
+ libtransmission/torrent.h      |  4 ++
+ libtransmission/transmission.h |  4 ++
+ libtransmission/verify.c       | 96 +++++++++++++++++++++++++++++++++-
+ libtransmission/verify.h       |  4 ++
+ 8 files changed, 131 insertions(+), 2 deletions(-)
+
+diff --git a/libtransmission/rpc-server.c b/libtransmission/rpc-server.c
+index 3ae724583..b99b1b978 100644
+--- a/libtransmission/rpc-server.c
++++ b/libtransmission/rpc-server.c
+@@ -209,6 +209,7 @@ handle_upload (struct evhttp_request * req,
+ 
+       const char * query = strchr (req->uri, '?');
+       const bool paused = query && strstr (query + 1, "paused=true");
++      const bool finished = query && strstr (query + 1, "finished=true");
+ 
+       extract_parts_from_multipart (req->input_headers, req->input_buffer, &parts);
+       n = tr_ptrArraySize (&parts);
+@@ -254,6 +255,7 @@ handle_upload (struct evhttp_request * req,
+           tr_variantDictAddStr (&top, TR_KEY_method, "torrent-add");
+           args = tr_variantDictAddDict (&top, TR_KEY_arguments, 2);
+           tr_variantDictAddBool (args, TR_KEY_paused, paused);
++          tr_variantDictAddBool (args, TR_KEY_isFinished, finished);
+ 
+           if (tr_urlIsValid (body, body_len))
+             {
+diff --git a/libtransmission/rpcimpl.c b/libtransmission/rpcimpl.c
+index 46fd3192c..2f7e6ec7e 100644
+--- a/libtransmission/rpcimpl.c
++++ b/libtransmission/rpcimpl.c
+@@ -386,6 +386,8 @@ torrentReannounce (tr_session               * session,
+ 
+   assert (idle_data == NULL);
+ 
++  tr_setFastHash (!tr_getFastHash());
++
+   torrents = getTorrents (session, args_in, &torrentCount);
+   for (i=0; i<torrentCount; ++i)
+     {
+@@ -1732,6 +1734,9 @@ torrentAdd (tr_session               * session,
+ 
+   tr_variantDictFindStr (args_in, TR_KEY_cookies, &cookies, NULL);
+ 
++  if (tr_variantDictFindBool (args_in, TR_KEY_isFinished, &boolVal))
++    tr_ctorSetFastHashCheck (ctor, TR_FORCE, boolVal);
++
+   if (download_dir != NULL)
+     tr_ctorSetDownloadDir (ctor, TR_FORCE, download_dir);
+ 
+diff --git a/libtransmission/torrent-ctor.c b/libtransmission/torrent-ctor.c
+index 101921280..c581f0bd5 100644
+--- a/libtransmission/torrent-ctor.c
++++ b/libtransmission/torrent-ctor.c
+@@ -57,6 +57,7 @@ struct tr_ctor
+     tr_file_index_t         normalSize;
+     tr_file_index_t       * high;
+     tr_file_index_t         highSize;
++    bool                    fastHashCheck;
+ };
+ 
+ /***
+@@ -209,6 +210,12 @@ tr_ctorSetFilePriorities (tr_ctor                * ctor,
+     *mycount = fileCount;
+ }
+ 
++void
++tr_ctorInitTorrentFastHashCheck (const tr_ctor * ctor, tr_torrent * tor)
++{
++    tor->fastHashCheck = ctor->fastHashCheck;
++}
++
+ void
+ tr_ctorInitTorrentPriorities (const tr_ctor * ctor, tr_torrent * tor)
+ {
+@@ -289,6 +296,14 @@ tr_ctorGetSave (const tr_ctor * ctor)
+     return ctor && ctor->saveInOurTorrentsDir;
+ }
+ 
++void
++tr_ctorSetFastHashCheck (tr_ctor * ctor, tr_ctorMode mode, bool fastHashCheck)
++{
++    TR_ASSERT(ctor != NULL);
++    TR_ASSERT(mode == TR_FALLBACK || mode == TR_FORCE);
++    ctor->fastHashCheck = fastHashCheck;
++}
++
+ void
+ tr_ctorSetPaused (tr_ctor *   ctor,
+                   tr_ctorMode mode,
+@@ -463,6 +478,7 @@ tr_ctorNew (const tr_session * session)
+ 
+     ctor->session = session;
+     ctor->bandwidthPriority = TR_PRI_NORMAL;
++    ctor->fastHashCheck = false;
+     if (session != NULL)
+     {
+         tr_ctorSetDeleteSource (ctor, tr_sessionGetDeleteSource (session));
+diff --git a/libtransmission/torrent.c b/libtransmission/torrent.c
+index 04dd922e1..3ecf168e8 100644
+--- a/libtransmission/torrent.c
++++ b/libtransmission/torrent.c
+@@ -903,6 +903,7 @@ torrentInit (tr_torrent * tor, const tr_ctor * ctor)
+ 
+   tr_ctorInitTorrentPriorities (ctor, tor);
+   tr_ctorInitTorrentWanted (ctor, tor);
++  tr_ctorInitTorrentFastHashCheck (ctor, tor);
+ 
+   refreshCurrentDir (tor);
+ 
+@@ -1053,6 +1054,7 @@ tr_torrentNew (const tr_ctor * ctor, int * setme_error, int * setme_duplicate_id
+     {
+       tor = tr_new0 (tr_torrent, 1);
+       tor->info = tmpInfo;
++      tor->fastHashCheck = false;
+ 
+       if (hasInfo)
+         tor->infoDictLength = len;
+diff --git a/libtransmission/torrent.h b/libtransmission/torrent.h
+index 4a16fa9eb..49486dd0d 100644
+--- a/libtransmission/torrent.h
++++ b/libtransmission/torrent.h
+@@ -33,6 +33,8 @@ void        tr_ctorSetSave (tr_ctor * ctor,
+ 
+ bool        tr_ctorGetSave (const tr_ctor * ctor);
+ 
++void        tr_ctorInitTorrentFastHashCheck (const tr_ctor * ctor, tr_torrent * tor);
++
+ void        tr_ctorInitTorrentPriorities (const tr_ctor * ctor, tr_torrent * tor);
+ 
+ void        tr_ctorInitTorrentWanted (const tr_ctor * ctor, tr_torrent * tor);
+@@ -272,6 +274,8 @@ struct tr_torrent
+     uint16_t                   idleLimitMinutes;
+     tr_idlelimit               idleLimitMode;
+     bool                       finishedSeedingByIdle;
++    
++    bool                       fastHashCheck;
+ };
+ 
+ static inline tr_torrent*
+diff --git a/libtransmission/transmission.h b/libtransmission/transmission.h
+index e213a8f4e..b1a94dd48 100644
+--- a/libtransmission/transmission.h
++++ b/libtransmission/transmission.h
+@@ -951,6 +951,10 @@ void        tr_ctorSetPaused (tr_ctor      * ctor,
+                               tr_ctorMode    mode,
+                               bool           isPaused);
+ 
++void        tr_ctorSetFastHashCheck (tr_ctor      * ctor,
++                                     tr_ctorMode    mode,
++                                     bool           isPaused);
++
+ /** @brief Set the priorities for files in a torrent */
+ void        tr_ctorSetFilePriorities (tr_ctor                * ctor,
+                                       const tr_file_index_t  * files,
+diff --git a/libtransmission/verify.c b/libtransmission/verify.c
+index f0882d7bc..939f3a180 100644
+--- a/libtransmission/verify.c
++++ b/libtransmission/verify.c
+@@ -39,15 +39,72 @@ enum
+   MSEC_TO_SLEEP_PER_SECOND_DURING_VERIFY = 100
+ };
+ 
++//global
++static bool fastHashCheck = true;
++
++void
++tr_setFastHash (bool set) 
++{   
++  fastHashCheck = set;
++}
++
++bool
++tr_getFastHash (void) 
++{   
++  return fastHashCheck;
++}
++
++static bool
++isSameTorrent(tr_torrent * tor, tr_torrent * dst)
++{
++  if (tor->info.pieceCount != dst->info.pieceCount || tor->info.fileCount != dst->info.fileCount) {
++      return false;
++  }
++  tr_piece_index_t pieceIndex = 0;
++  while (pieceIndex < tor->info.pieceCount) {
++      if (memcmp(tor->info.pieces[pieceIndex].hash, dst->info.pieces[pieceIndex].hash, SHA_DIGEST_LENGTH) != 0) {
++          return false;
++      }
++      ++pieceIndex;
++  }
++  tr_file_index_t fileIndex = 0;
++  while (fileIndex < tor->info.fileCount) {
++      char* fn1 = tr_torrentFindFile(tor, fileIndex);
++      char* fn2 = tr_torrentFindFile(dst, fileIndex);
++      bool eq = tr_strcmp0(fn1, fn2) == 0;
++      tr_free(fn1);
++      tr_free(fn2);
++      if (!eq) {
++          return false;
++      }
++      ++fileIndex;
++  }
++  return true;
++}
++
+ static bool
+ verifyTorrent (tr_torrent * tor, bool * stopFlag)
+ {
++  bool firstRun = true;
++  bool hasSameTorrent = false;
++  //checking torrents in session
++  tr_torrent* walk = NULL;
++  while ((walk = tr_torrentNext(tor->session, walk)) != NULL)
++  {
++      if (tr_torrentGetActivity(walk) == TR_STATUS_SEED && isSameTorrent(tor, walk)) {
++          hasSameTorrent = true;
++          break;
++      }
++  }
++retry:
++  {
+   time_t end;
+   tr_sha1_ctx_t sha;
+   tr_sys_file_t fd = TR_BAD_SYS_FILE;
+   uint64_t filePos = 0;
+   bool changed = false;
+   bool hadPiece = false;
++  bool badResult = false;
+   time_t lastSleptAt = 0;
+   uint32_t piecePos = 0;
+   tr_file_index_t fileIndex = 0;
+@@ -61,6 +118,8 @@ verifyTorrent (tr_torrent * tor, bool * stopFlag)
+ 
+   tr_logAddTorDbg (tor, "%s", "verifying torrent...");
+   tr_torrentSetChecked (tor, 0);
++  bool fastHashCheckFlag = false;
++  tr_piece_index_t checkPiece = 0;
+   while (!*stopFlag && (pieceIndex < tor->info.pieceCount))
+     {
+       uint64_t leftInPiece;
+@@ -88,11 +147,24 @@ verifyTorrent (tr_torrent * tor, bool * stopFlag)
+       bytesThisPass = MIN (leftInFile, leftInPiece);
+       bytesThisPass = MIN (bytesThisPass, buflen);
+ 
++      /* Check or no check? It's a question.  */
++      if (checkPiece != pieceIndex && (filePos <= tr_torPieceCountBytes(tor, pieceIndex)*2 || leftInFile <= tr_torPieceCountBytes(tor, pieceIndex)*2)) 
++        {
++          if (piecePos == 0) {
++              checkPiece = pieceIndex;
++          } else {
++              checkPiece = pieceIndex+1;
++          }
++        }
++      bool isCheckPiece = (!hasSameTorrent && pieceIndex%(tor->fastHashCheck?1024:256)) == 0 || pieceIndex+1==tor->info.pieceCount || pieceIndex == checkPiece;
++      fastHashCheckFlag = (fastHashCheck || tor->fastHashCheck) && !isCheckPiece
++          && firstRun;
++
+       /* read a bit */
+       if (fd != TR_BAD_SYS_FILE)
+         {
+           uint64_t numRead;
+-          if (tr_sys_file_read_at (fd, buffer, bytesThisPass, filePos, &numRead, NULL) && numRead > 0)
++          if (!fastHashCheckFlag && tr_sys_file_read_at (fd, buffer, bytesThisPass, filePos, &numRead, NULL) && numRead > 0)
+             {
+               bytesThisPass = numRead;
+               tr_sha1_update (sha, buffer, bytesThisPass);
+@@ -100,6 +172,8 @@ verifyTorrent (tr_torrent * tor, bool * stopFlag)
+               (void) posix_fadvise (fd, filePos, bytesThisPass, POSIX_FADV_DONTNEED);
+ #endif
+             }
++        } else {
++            fastHashCheckFlag = false;
+         }
+ 
+       /* move our offsets */
+@@ -116,7 +190,8 @@ verifyTorrent (tr_torrent * tor, bool * stopFlag)
+           uint8_t hash[SHA_DIGEST_LENGTH];
+ 
+           tr_sha1_final (sha, hash);
+-          hasPiece = !memcmp (hash, tor->info.pieces[pieceIndex].hash, SHA_DIGEST_LENGTH);
++          hasPiece = fastHashCheckFlag || !memcmp (hash, tor->info.pieces[pieceIndex].hash, SHA_DIGEST_LENGTH);
++          badResult |= !hasPiece;
+ 
+           if (hasPiece || hadPiece)
+             {
+@@ -160,13 +235,27 @@ verifyTorrent (tr_torrent * tor, bool * stopFlag)
+   tr_sha1_final (sha, NULL);
+   free (buffer);
+ 
++  /* badResult retry */
++  if (badResult && firstRun && (fastHashCheck || tor->fastHashCheck))
++  {
++      firstRun = false;
++      goto retry;
++  }
++
++  if (fastHashCheck && firstRun)
++  {
++      tr_logAddTorInfo (tor, "%s", _("Verify with fast hash check"));
++  }
++
+   /* stopwatch */
+   end = tr_time ();
+   tr_logAddTorDbg (tor, "Verification is done. It took %d seconds to verify %"PRIu64" bytes (%"PRIu64" bytes per second)",
+              (int)(end-begin), tor->info.totalSize,
+              (uint64_t)(tor->info.totalSize/ (1+ (end-begin))));
+ 
++  tor->fastHashCheck = false;
+   return changed;
++  }
+ }
+ 
+ /***
+@@ -298,6 +387,9 @@ tr_verifyRemove (tr_torrent * tor)
+ 
+   assert (tr_isTorrent (tor));
+ 
++  if (tor->verifyState == TR_VERIFY_NOW || tor->verifyState == TR_VERIFY_WAIT)
++      tor->fastHashCheck = true;
++
+   if (tor == currentNode.torrent)
+     {
+       stopCurrent = true;
+diff --git a/libtransmission/verify.h b/libtransmission/verify.h
+index 23bd66abf..83f06348b 100644
+--- a/libtransmission/verify.h
++++ b/libtransmission/verify.h
+@@ -27,6 +27,10 @@ void tr_verifyRemove (tr_torrent * tor);
+ 
+ void tr_verifyClose (tr_session *);
+ 
++void tr_setFastHash (bool);
++
++bool tr_getFastHash (void);
++
+ /* @} */
+ 
+ #endif
+-- 
+2.20.1
+

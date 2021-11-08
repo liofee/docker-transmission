@@ -1,0 +1,44 @@
+From 96713af3bd9178e55e7d3cb95d2846e0a2598c7c Mon Sep 17 00:00:00 2001
+From: liofee <liofee@hotmail.com>
+Date: Tue, 9 Nov 2021 00:32:19 +0800
+Subject: [PATCH 1/3] path random_announce
+
+---
+ libtransmission/announcer.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/libtransmission/announcer.c b/libtransmission/announcer.c
+index 35e1f49ba..8ed820fb8 100644
+--- a/libtransmission/announcer.c
++++ b/libtransmission/announcer.c
+@@ -1147,10 +1147,13 @@ on_announce_done (const tr_announce_response  * response,
+                then a separate scrape isn't needed */
+             if (scrape_fields >= 3 || (scrape_fields >= 1 && tracker->scrape != NULL))
+             {
++                i = round(tier->scrapeIntervalSec * 0.95) +
++                    tr_rand_init_weak(round(tier->scrapeIntervalSec * 0.1));
+                 tr_logAddTorDbg (tier->tor, "Announce response contained scrape info; "
+                                       "rescheduling next scrape to %d seconds from now.",
+-                                      tier->scrapeIntervalSec);
+-                tier->scrapeAt = get_next_scrape_time (announcer->session, tier, tier->scrapeIntervalSec);
++                                      i);
++                tier->scrapeAt = get_next_scrape_time (announcer->session, tier,
++                        i);
+                 tier->lastScrapeTime = now;
+                 tier->lastScrapeSucceeded = true;
+             }
+@@ -1176,8 +1179,9 @@ on_announce_done (const tr_announce_response  * response,
+             if (!isStopped && !tier->announce_event_count)
+             {
+                 /* the queue is empty, so enqueue a perodic update */
+-                i = tier->announceIntervalSec;
+-                dbgmsg (tier, "Sending periodic reannounce in %d seconds", i);
++                i = round(tier->announceIntervalSec * 0.95) +
++                    tr_rand_init_weak(round(tier->announceIntervalSec * 0.1));
++                tr_logAddTorDbg(tier->tor, "Sending periodic reannounce in %d seconds", i);
+                 tier_announce_event_push (tier, TR_ANNOUNCE_EVENT_NONE, now + i);
+             }
+         }
+-- 
+2.20.1
+
