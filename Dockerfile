@@ -29,8 +29,8 @@ RUN \
  cd /transmission-build && \
  
  echo "**** download transmission ****" && \
- curl -O https://github.com/transmission/transmission/archive/refs/tags/2.94.tar.gz && \
- tar -xf 2.94.tar.gz && \
+ curl -O https://codeload.github.com/transmission/transmission/tar.gz/refs/tags/2.94 && \
+ tar -zxf 2.94.tar.gz && \
  cd transmission-2.94 && \
  
  echo "**** download patch ****" && \
